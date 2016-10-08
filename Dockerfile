@@ -2,12 +2,26 @@ FROM centos:7
 
 MAINTAINER fising <fising@qq.com>
 
+ENV NGINX_VERSION 1.10.1
 ENV PHP_VERSION 7.0.11
-ENV PHP_FPM_PORT 9000
+ENV NGINX_PORT 80
 
-RUN yum update -y && yum -y install wget gcc gcc-c++ libxml2 libxml2-devel openssl openssl-devel curl-devel libjpeg-devel libpng-devel freetype-devel libmcrypt-devel
+RUN yum update -y && yum -y install wget gcc gcc-c++ autoconf automake libtool make cmake zlib zlib-devel pcre-devel libxml2 libxml2-devel openssl openssl-devel curl-devel libjpeg-devel libpng-devel freetype-devel libmcrypt-devel
 
 WORKDIR /usr/local/src/
+
+RUN wget ftp://ftp.csx.cam.ac.uk/pub/software/programming/pcre/pcre-8.39.tar.gz && \
+    tar xzvf pcre-8.39.tar.gz
+
+RUN groupadd nginx && \
+    useradd -g nginx -s /sbin/nologin -M nginx && \
+    wget http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
+    tar zxvf nginx-${NGINX_VERSION}.tar.gz && \
+    cd nginx-${NGINX_VERSION} && \
+    ./configure --prefix=/usr/local/nginx --with-http_ssl_module --user=nginx --group=nginx --with-pcre=/usr/local/src/pcre-8.39 --without-mail_pop3_module --without-mail_imap_module --without-mail_smtp_module && \
+    make && \
+    make install && \
+    cd ..
 
 RUN wget ftp://mcrypt.hellug.gr/pub/crypto/mcrypt/libmcrypt/libmcrypt-2.5.7.tar.gz && \
     tar xzvf libmcrypt-2.5.7.tar.gz && \
@@ -17,7 +31,9 @@ RUN wget ftp://mcrypt.hellug.gr/pub/crypto/mcrypt/libmcrypt/libmcrypt-2.5.7.tar.
     make install && \
     cd ..
 
-RUN wget -O php-${PHP_VERSION}.tar.gz http://cn2.php.net/get/php-${PHP_VERSION}.tar.gz/from/this/mirror && \
+RUN groupadd www && \
+    useradd -g www -s /sbin/nologin -M www && \
+    wget -O php-${PHP_VERSION}.tar.gz http://cn2.php.net/get/php-${PHP_VERSION}.tar.gz/from/this/mirror && \
     tar xzvf php-${PHP_VERSION}.tar.gz && \
     cd php-${PHP_VERSION} && \
     ./configure --prefix=/usr/local/php \
@@ -57,12 +73,12 @@ RUN wget -O php-${PHP_VERSION}.tar.gz http://cn2.php.net/get/php-${PHP_VERSION}.
     make install && \
     cp php.ini-development /usr/local/php/etc/php.ini && \
     cp /usr/local/php/etc/php-fpm.conf.default /usr/local/php/etc/php-fpm.conf && \
-    groupadd www && \
-    useradd -g www -s /sbin/nologin www && \
     sed 's/user = nginx/user = www/;s/group = nginx/group = www/' /usr/local/php/etc/php-fpm.d/www.conf.default > /usr/local/php/etc/php-fpm.d/www.conf
 
-EXPOSE $PHP_FPM_PORT
+COPY nginx.conf /usr/local/nginx/conf/nginx.conf
+
+EXPOSE $NGINX_PORT
 
 VOLUME ["/app"]
 
-ENTRYPOINT /usr/local/php/sbin/php-fpm && /bin/bash
+ENTRYPOINT /usr/local/php/sbin/php-fpm && /usr/local/nginx/sbin/nginx && /bin/bash
